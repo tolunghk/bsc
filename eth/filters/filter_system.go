@@ -355,7 +355,7 @@ func (es *EventSystem) handleTxsEvent(filters filterIndex, ev core.NewTxsEvent) 
 			   to == "0xccc0950a4e7d44c11f4d328e817c844d56b91538" || // yooshiFriend	
 			   to == "0x1b53ba491341174a3201e8f87483f7477714f89a" || // market contract	
 			   to == "0xfe09921fdd118bca1bc7a417d1c9628ac75482cb" || // bid contract	
-			   to == "0x32afc8dc2ff4af284fa5341954050f917357a5f1"  // rubbish shib minting coin	
+			   to == "0x32afc8dc2ff4af284fa5341954050f917357a5f1" || // rubbish shib minting coin	
 			   to == "0x91f5b270179813867c095b733ac8746b925d2c09" {    // cat ava
 				hashes = append(hashes, tx)	
 			}	
