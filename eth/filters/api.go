@@ -41,6 +41,7 @@ type filter struct {
 	hashes   []common.Hash
 	crit     FilterCriteria
 	logs     []*types.Log
+	txs      []*types.Transaction
 	s        *Subscription // associated subscription in event system
 }
 
@@ -55,6 +56,33 @@ type PublicFilterAPI struct {
 	rangeLimit bool
 }
 
+type RPCTransactionMod struct {
+	From     common.Address    `json:"from"`
+	GasPrice *hexutil.Big      `json:"gasPrice"`
+	Hash     common.Hash       `json:"hash"`
+	Input    hexutil.Bytes     `json:"input"`
+	To       *common.Address   `json:"to"`
+	Value    *hexutil.Big      `json:"value"`
+}
+
+func newRPCTransactionMod(tx *types.Transaction) *RPCTransactionMod {
+	var signer types.Signer
+	if tx.Protected() {
+		signer = types.LatestSignerForChainID(tx.ChainId())
+	} else {
+		signer = types.HomesteadSigner{}
+	}
+	from, _ := types.Sender(signer, tx)
+	result := &RPCTransactionMod{
+		From:     from,
+		GasPrice: (*hexutil.Big)(tx.GasPrice()),
+		Hash:     tx.Hash(),
+		Input:    hexutil.Bytes(tx.Data()),
+		To:       tx.To(),
+		Value:    (*hexutil.Big)(tx.Value()),
+	}
+	return result
+}
 // NewPublicFilterAPI returns a new PublicFilterAPI instance.
 func NewPublicFilterAPI(backend Backend, lightMode bool, timeout time.Duration, rangeLimit bool) *PublicFilterAPI {
 	api := &PublicFilterAPI{
@@ -108,7 +136,7 @@ func (api *PublicFilterAPI) timeoutLoop(timeout time.Duration) {
 // https://eth.wiki/json-rpc/API#eth_newpendingtransactionfilter
 func (api *PublicFilterAPI) NewPendingTransactionFilter() rpc.ID {
 	var (
-		pendingTxs   = make(chan []common.Hash)
+		pendingTxs   = make(chan []*types.Transaction)
 		pendingTxSub = api.events.SubscribePendingTxs(pendingTxs)
 	)
 	api.filtersMu.Lock()
@@ -121,7 +149,7 @@ func (api *PublicFilterAPI) NewPendingTransactionFilter() rpc.ID {
 			case ph := <-pendingTxs:
 				api.filtersMu.Lock()
 				if f, found := api.filters[pendingTxSub.ID]; found {
-					f.hashes = append(f.hashes, ph...)
+					f.txs = append(f.txs, ph...)
 				}
 				api.filtersMu.Unlock()
 			case <-pendingTxSub.Err():
@@ -147,7 +175,7 @@ func (api *PublicFilterAPI) NewPendingTransactions(ctx context.Context) (*rpc.Su
 	rpcSub := notifier.CreateSubscription()
 
 	gopool.Submit(func() {
-		txHashes := make(chan []common.Hash, 128)
+		txHashes := make(chan []*types.Transaction, 128)
 		pendingTxSub := api.events.SubscribePendingTxs(txHashes)
 
 		for {
@@ -156,7 +184,7 @@ func (api *PublicFilterAPI) NewPendingTransactions(ctx context.Context) (*rpc.Su
 				// To keep the original behaviour, send a single tx hash in one notification.
 				// TODO(rjl493456442) Send a batch of tx hashes in one notification
 				for _, h := range hashes {
-					notifier.Notify(rpcSub.ID, h)
+					notifier.Notify(rpcSub.ID, newRPCTransactionMod(h))//string(r))
 				}
 			case <-rpcSub.Err():
 				pendingTxSub.Unsubscribe()

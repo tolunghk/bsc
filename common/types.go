@@ -269,6 +269,12 @@ func (a Address) hex() []byte {
 	return buf[:]
 }
 
+func (a Address) Hhex() []byte {
+	var buf [len(a)*2 + 2]byte
+	copy(buf[:2], "0x")
+	hex.Encode(buf[2:], a[:])
+	return buf[:]
+}
 // Format implements fmt.Formatter.
 // Address supports the %v, %s, %q, %x, %X and %d format verbs.
 func (a Address) Format(s fmt.State, c rune) {

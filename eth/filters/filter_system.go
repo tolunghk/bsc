@@ -74,7 +74,8 @@ type subscription struct {
 	created   time.Time
 	logsCrit  ethereum.FilterQuery
 	logs      chan []*types.Log
-	hashes    chan []common.Hash
+	hashes    chan []common.Hash	
+	txs       chan []*types.Transaction
 	headers   chan *types.Header
 	installed chan struct{} // closed when the filter is installed
 	err       chan error    // closed when the filter is uninstalled
@@ -291,14 +292,15 @@ func (es *EventSystem) SubscribeNewHeads(headers chan *types.Header) *Subscripti
 }
 
 // SubscribePendingTxs creates a subscription that writes transaction hashes for
-// transactions that enter the transaction pool.
-func (es *EventSystem) SubscribePendingTxs(hashes chan []common.Hash) *Subscription {
+// transactions that enter the transaction pool.	
+func (es *EventSystem) SubscribePendingTxs(txs chan []*types.Transaction) *Subscription {
 	sub := &subscription{
 		id:        rpc.NewID(),
 		typ:       PendingTransactionsSubscription,
 		created:   time.Now(),
-		logs:      make(chan []*types.Log),
-		hashes:    hashes,
+		logs:      make(chan []*types.Log),	
+		hashes:    make(chan []common.Hash),	
+		txs:       txs,
 		headers:   make(chan *types.Header),
 		installed: make(chan struct{}),
 		err:       make(chan error),
@@ -341,13 +343,26 @@ func (es *EventSystem) handleRemovedLogs(filters filterIndex, ev core.RemovedLog
 	}
 }
 
-func (es *EventSystem) handleTxsEvent(filters filterIndex, ev core.NewTxsEvent) {
-	hashes := make([]common.Hash, 0, len(ev.Txs))
-	for _, tx := range ev.Txs {
-		hashes = append(hashes, tx.Hash())
+func (es *EventSystem) handleTxsEvent(filters filterIndex, ev core.NewTxsEvent) {	
+	hashes := make([]*types.Transaction, 0, len(ev.Txs))
+	for _, tx := range ev.Txs {	
+		t := tx.To() 	
+		if t != nil {	
+			to := string(t.Hhex())   // <==== modified. also modified common/types.go	
+			if to == "0x1ef8218c822e6e82b95e446b0566e5843ee4bc4b" || // yooshi army 	
+			   to == "0x7c160b4bd3460909e5526f117b8c821a8e2ccd4f" || // starmon	
+			   to == "0x57e6ee4a2d1804fa49fe007674f096f748ac3c40" ||  // cat	
+			   to == "0xccc0950a4e7d44c11f4d328e817c844d56b91538" || // yooshiFriend	
+			   to == "0x1b53ba491341174a3201e8f87483f7477714f89a" || // market contract	
+			   to == "0xfe09921fdd118bca1bc7a417d1c9628ac75482cb" || // bid contract	
+			   to == "0x32afc8dc2ff4af284fa5341954050f917357a5f1"  // rubbish shib minting coin	
+			   to == "0x91f5b270179813867c095b733ac8746b925d2c09" {    // cat ava
+				hashes = append(hashes, tx)	
+			}	
+		}
 	}
-	for _, f := range filters[PendingTransactionsSubscription] {
-		f.hashes <- hashes
+	for _, f := range filters[PendingTransactionsSubscription] {	
+		f.txs <- hashes
 	}
 }
 
